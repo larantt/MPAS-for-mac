@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 
-# script sets all the paths I used to build MPAS and WPS
-#!/bin/bash
+# script sets all the paths I used to build MPAS and should also check that they are correct!
+# just run as source set_paths_MPAS.sh 
+conda deactivate
 
 # Path to library sources and install location
 export LIBSRC=/Users/laratobias-tarsh/Documents/mpas_dependencies
@@ -40,8 +41,8 @@ export PIO=$LIBBASE
 
 # Flags for building and linking
 export CPPFLAGS="-I$LIBBASE/include -I$LIBBASE/include"
-export LDFLAGS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl -lnetcdff"
-export LIBS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl -lnetcdff"
+export LDFLAGS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl"
+export LIBS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl"
 
 # Ensure tools like nc-config are found
 export PATH="$LIBBASE/bin:$PATH"
@@ -50,6 +51,9 @@ export LD_LIBRARY_PATH="$LIBBASE/lib:$LD_LIBRARY_PATH"
 # For MPAS build system
 export MPAS_EXTERNAL_INCLUDES="-I${LIBBASE}/include"
 export MPAS_EXTERNAL_LIBS="-L${LIBBASE}/lib -lhdf5_hl -lhdf5 -ldl -lz"
+
+# Set path to convert_mpas
+export PATH=/Users/laratobias-tarsh/Documents/atmos_models/convert_mpas:${PATH}
 
 # Print checks
 echo "CHECKING PATHS..."
