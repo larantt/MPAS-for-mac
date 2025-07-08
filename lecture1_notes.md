@@ -7,7 +7,7 @@ Three key steps to this:
 - Interpolate sea surface and sea ice fractions (useful because no fully prognostic 3D ocean)
 
 ### Producing initial conditions
-First step is to download precomputed or prepared meshes from the MPAS home page through MPAS atmosphere meshes.
+First step is to download precomputed or prepared meshes from the MPAS home page through MPAS atmosphere meshes. Put this in its own directory and symlink the init_atmosphere_model executable to the new directory, then copy the namelist and streams file to this new directory too
 
 Each download gives a mesh itself and a mesh partition file (which firects the compute task partition file)
 #### FILENAMES

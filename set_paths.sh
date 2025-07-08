@@ -40,8 +40,8 @@ export PIO=$LIBBASE
 
 # Flags for building and linking
 export CPPFLAGS="-I$LIBBASE/include -I$LIBBASE/include"
-export LDFLAGS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl"
-export LIBS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl"
+export LDFLAGS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl -lnetcdff"
+export LIBS="-L$LIBBASE/lib -L$LIBBASE/lib -lnetcdf -lpnetcdf -lm -lbz2 -lxml2 -lcurl -lhdf5_hl -lhdf5 -lz -ldl -lnetcdff"
 
 # Ensure tools like nc-config are found
 export PATH="$LIBBASE/bin:$PATH"
