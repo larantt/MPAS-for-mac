@@ -39,6 +39,9 @@ RUN_LEN=5_00:00:00            # D_hh:mm:ss (length of the run)
 DT=1200.0                     # model timestep in seconds (between 5 and 6 times the minimum model grid size in km)
 Z_TOP=30000.0                 # height of the top of atmospheric column
 RAD_INT=01:00:00              # interval the radiation schemes are called at
+HIST_OUT_INT=6:00:00          # how frequently to output history files (3d)
+DIAG_OUT_INT=3:00:00          # how frequently to output diagnostics files (2d)
+RESTART_INT=1_00:00:00        # how frequently to output restart files
 
 UPDATE_OCEAN='false'          # are we updating the ocean data? 'false' or 'true'
 FG_INTERVAL=none             # interval between SST update files (int like 86400 or none)
@@ -523,12 +526,12 @@ cat << EOF > streams.atmosphere
                   type="input;output"
                   filename_template="restart.$Y-$M-$D_$h.$m.$s.nc"
                   input_interval="initial_only"
-                  output_interval="1_00:00:00" />
+                  output_interval="${RESTART_INT}" />
 
 <stream name="output"
         type="output"
         filename_template="history.$Y-$M-$D_$h.$m.$s.nc"
-        output_interval="6:00:00" >
+        output_interval="${HIST_OUT_INT}" >
 
 	<file name="stream_list.atmosphere.output"/>
 </stream>
@@ -536,7 +539,7 @@ cat << EOF > streams.atmosphere
 <stream name="diagnostics"
         type="output"
         filename_template="diag.$Y-$M-$D_$h.$m.$s.nc"
-        output_interval="3:00:00" >
+        output_interval="${DIAG_OUT_INT}" >
 
 	<file name="stream_list.atmosphere.diagnostics"/>
 </stream>
