@@ -15,18 +15,19 @@
 # add preprocessing for limited area runs if we are doing that?
 ####################
 
+start_time=$(date +%s)
+
 ### GLOBALS ###
 MPI_NPROCS=4
 # filepaths
 MESH_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/MPAS_meshes/92-25km_x4.163842 # path to where the mesh is downloaded
 MPAS_DIR=/Users/laratobias-tarsh/Documents/atmos_models/MPAS_model
 STATIC_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/static/mpas_static
-ATMOS_DATA_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/CFSR_TEST
-SST_DATA_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/SST_ERA5
+ATMOS_DATA_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/ERA5/1975-11-08_1975-11-11/met_data
 PLOT_DIR=/Users/laratobias-tarsh/Documents/MPAS_notes/python_scripts
 
 # naming variables
-MESH_SIZE="240-48"       # size of mesh in km (can include the reduction for variable if desired)
+MESH_SIZE="92-25"       # size of mesh in km (can include the reduction for variable if desired)
 MESH_TYPE="variable"     # just useful for naming (either uniform, variable or LAM)
 MESH_EXT="x4.163842"      # "identifier code" for the downloaded mesh (needed for namelists etc)
 RUN_EXT="ED_FITZ"      # name to give the specific run
@@ -38,9 +39,9 @@ ROT_LON=-87.5             # specify where the central longitude of the refinemen
 ROT_CCW=90              # rotate orientation of refinement with respect to the poles
 
 # namelist variables
-START_RUN=2010-10-23_00:00:00 # YYYY-MM-DD_hh:mm:ss
-END_RUN=2010-10-28_00:00:00   # YYYY-MM-DD_hh:mm:ss
-RUN_LEN=5_00:00:00            # D_hh:mm:ss (length of the run)
+START_RUN=1975-11-08_00:00:00 # YYYY-MM-DD_hh:mm:ss
+END_RUN=1975-11-11_00:00:00   # YYYY-MM-DD_hh:mm:ss
+RUN_LEN=4_00:00:00            # D_hh:mm:ss (length of the run)
 
 DT=1200.0                     # model timestep in seconds (between 5 and 6 times the minimum model grid size in km)
 Z_TOP=30000.0                 # height of the top of atmospheric column
@@ -61,6 +62,88 @@ N_FG_SOIL_LEVS=4              # number of first guess soil levels in atmospheric
 
 RUN_DIR=/Users/Documents/atmos_models/MPAS_runs/${MESH_SIZE}km_${MESH_TYPE}_${RUN_EXT}
 
+
+## Utility Functions ##
+
+# Function: safe_cd
+# Description: This makes sure a directory exists before CDing in.
+# Arguments:
+#   $1 (string): Target directory to CD into.
+# Returns:
+#   0 on success, 1 on error.
+# Example:
+#   safe_cd "${RUN_DIR}"
+safe_cd() {
+    local target_dir="$1"
+    if [ -d "$target_dir" ]; then
+        cd "$target_dir" || {
+            echo "ERROR: Failed to change directory to $target_dir"
+            exit 1
+        }
+    else
+        echo "ERROR: Directory does not exist: $target_dir"
+        exit 1
+    fi
+}
+
+# Function: safe_ln
+# Description: This makes sure a file exists before symlinking.
+# Arguments:
+#   $1 (string): Target file to symlink.
+#   $2 (string): Location and name for symlink.
+# Returns:
+#   0 on success, 1 on error.
+# Example:
+#   safe_ln "${MPAS_DIR}/init_atmosphere_model" .
+safe_ln() {
+    local source="$1"
+    local linkname="$2"
+
+    if [ ! -e "$source" ]; then
+        echo "ERROR: Source file does not exist: $source"
+        exit 1
+    fi
+
+    ln -sf "$source" "$linkname"
+    echo "Linked $source to $linkname"
+}
+
+# Function: check_required_files
+# Description: Pre-checks that all the input files needed to run MPAS exist
+# Arguments:
+# None
+# Returns:
+#   0 on success, 1 on error.
+# Example:
+#   check_required_files
+check_required_files() {
+    echo "Running pre-run checks..."
+
+    # Check mesh files
+    local grid_file="${MESH_DIR}/${MESH_EXT}.grid.nc"
+    local graph_file="${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS}"
+    [[ -f "$grid_file" ]] || { echo "ERROR: Missing mesh grid file: $grid_file"; exit 1; }
+    [[ -f "$graph_file" ]] || { echo "ERROR: Missing partition file for ${MPI_NPROCS} cores: $graph_file"; exit 1; }
+
+    # Check atmosphere initial condition
+    local met_file="${ATMOS_DATA_DIR}/${MET_PREFIX}:${START_RUN}"
+    [[ -f "$met_file" ]] || { echo "ERROR: Missing initial condition file: $met_file"; exit 1; }
+
+    # Check SST input (optional updates)
+    if [[ "$UPDATE_OCEAN" == "true" ]]; then
+        local sst_file="${ATMOS_DATA_DIR}/${SFC_PREFIX}:${START_RUN}"
+        [[ -f "$sst_file" ]] || { echo "ERROR: UPDATE_OCEAN=true but missing SST file: $sst_file"; exit 1; }
+    fi
+
+    # Check for mesh rotation output (if variable resolution)
+    if [[ "$MESH_TYPE" == "variable" ]]; then
+        local rotated_grid="${MESH_NAME}.grid.nc"
+        [[ -f "$rotated_grid" ]] || { echo "ERROR: Expected rotated mesh file not found: $rotated_grid"; exit 1; }
+    fi
+
+    echo "Preflight checks passed."
+}
+
 ## PROCESS ICs - can skip parts if the static variables and/or initial conditions have already been created ##
 ##
 # Ensure all libraries are linked properly (script should do this for you)
@@ -72,15 +155,19 @@ if [[ "$MESH_TYPE" == "uniform" ]]; then
     MESH_NAME=$MESH_EXT
 fi
 
+# Check the required files exist
+check_required_files
+
 # Compile the init_atmosphere core
-cd $MPAS_DIR
+safe_cd $MPAS_DIR
 make gfortran CORE=init_atmosphere
 
 # Set up the run directory
 mkdir $RUN_DIR
-cd $RUN_DIR
-ln -s ${MESH_DIR}/${MESH_EXT}.grid.nc .    # symlink the grid file for the mesh
-ln -s ${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS} .  # symlink the mesh partition file
+safe_cd $RUN_DIR
+
+safe_ln ${MESH_DIR}/${MESH_EXT}.grid.nc .    # symlink the grid file for the mesh
+safe_ln ${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS} .  # symlink the mesh partition file
 
 # if using a variable mesh, use grid_rotate to refine the mesh
 if [[ "$MESH_TYPE" == "variable" ]]; then
@@ -104,7 +191,7 @@ EOF
 
 fi
 
-ln -s ${MPAS_DIR}/init_atmosphere_model .  # symlink the init_atmosphere executable
+safe_ln ${MPAS_DIR}/init_atmosphere_model .  # symlink the init_atmosphere executable
 
 # NOTE - these are commented out if you just use the cat command to create a new file
 # otherwise, copy then manually edit the namelist (which is what i would probably do lol)
@@ -214,7 +301,10 @@ cat << EOF > streams.init_atmosphere
 EOF
 
 # now run init_atmosphere (NOTE - this is long, not sure if it can be done with MPI, I haven't tried yet)
-./init_atmosphere
+#./init_atmosphere
+LOG_FILE=log.init_atmosphere.$(date +%s).out
+./init_atmosphere > $LOG_FILE 2>&1 || { echo "init_atmosphere failed. Check $LOG_FILE"; exit 1; }
+
 # mpirun -np 4 init_atmosphere
 
 ## Check on progress: 
@@ -327,7 +417,9 @@ cat << EOF > streams.init_atmosphere
 EOF
 
 # now run init_atmosphere (NOTE - this is long, not sure if it can be done with MPI, I haven't tried yet)
-./init_atmosphere
+#./init_atmosphere
+LOG_FILE=log.init_atmosphere.$(date +%s).out
+./init_atmosphere > $LOG_FILE 2>&1 || { echo "init_atmosphere failed. Check $LOG_FILE"; exit 1; }
 # mpirun -np 4 init_atmosphere
 
 ## Check on progress: 
@@ -337,10 +429,6 @@ EOF
 
 # PREPROC 3 (OPTIONAL): process SST update files
 if [[ "$UPDATE_OCEAN" == "true" ]]; then
-    ln -s ${SST_DATA_DIR}/SST* .  # symlink all needed SST update files to the run directory
-    # note, this may need to be edited to take a certain date range
-    # e.g. for file in file{1..10}.txt; do ln -s "$file" /path/to/destination/"$file"; done
-
     # overwrite namelist.init_atmosphere to create SST files
     # main changes in &nhydmodel (NOTE config_init_case=8), &data_sources and &preproc_stages
     cat << EOF > namelist.init_atmosphere
@@ -360,7 +448,7 @@ if [[ "$UPDATE_OCEAN" == "true" ]]; then
     config_gocartlevels = 1
 /
 &data_sources
-    config_geog_data_path = '${SST_DATA_DIR}'
+    config_geog_data_path = '${ATMOS_DATA_DIR}'
     config_met_prefix = '${MET_PREFIX}'
     config_sfc_prefix = 'SST'
     config_fg_interval = '${FG_INTERVAL}'
@@ -442,7 +530,9 @@ EOF
 
 </streams>
 EOF
-    ./init_atmosphere
+    #./init_atmosphere
+    LOG_FILE=log.init_atmosphere.$(date +%s).out
+    ./init_atmosphere > $LOG_FILE 2>&1 || { echo "init_atmosphere failed. Check $LOG_FILE"; exit 1; }
     # mpirun -np 4 init_atmosphere
 
     ## Check on progress:
@@ -455,14 +545,14 @@ fi
 ## INTEGRATE THE MODEL - this is the fun running part! This is set up for my Mac so I only have 4 processors to work with ##
 ##
 # clean the init_atmosphere core and make the atmosphere core
-cd $MPAS_DIR
+safe_cd $MPAS_DIR
 make clean CORE=init_atmosphere
 make gfortran CORE=atmosphere
 
-cd $RUN_DIR
-ln -s ${MPAS_DIR}/atmosphere_model .      # symlink the atmosphere executable
+safe_cd $RUN_DIR
+safe_ln ${MPAS_DIR}/atmosphere_model .      # symlink the atmosphere executable
 cp ${MPAS_DIR}/stream_list.atmosphere.* . # copy the stream lists for the atmosphere core (DIFFERENT to streams)
-ln -s ${MPAS_DIR}/src/core_atmosphere/physics/physics_wrf/files/* . # symlink to files needed for model physics
+safe_ln ${MPAS_DIR}/src/core_atmosphere/physics/physics_wrf/files/* . # symlink to files needed for model physics
 
 # NOTE - these are commented out if you just use the cat command to create a new file
 # otherwise, copy then manually edit the namelist (which is what i would probably do lol)
@@ -637,10 +727,19 @@ cat << EOF > streams.atmosphere
 EOF
 
 # now symlink the mesh partition file for the correct number of processors
-ln -s ${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS} .
+safe_ln ${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS} .
 
 # run the atmosphere model!
-mpirun -np ${MPI_NPROCS} atmosphere_model 
+#mpirun -np ${MPI_NPROCS} atmosphere_model 
+mpirun -np ${MPI_NPROCS} atmosphere_model > log.atmosphere.out 2>&1
+
+# clean up
+echo "simulation completed! Cleaning up MPAS execuatbles"
+safe_cd $MPAS_DIR
+make clean CORE=atmosphere
+
+end_time=$(date +%s)
+echo "Step took $((end_time - start_time)) seconds"
 
 ## Check on progress: 
 ## tail -f log.atmosphere.0000.out
