@@ -18,7 +18,7 @@
 ### GLOBALS ###
 MPI_NPROCS=4
 # filepaths
-MESH_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/MPAS_meshes # path to where the mesh is downloaded
+MESH_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/MPAS_meshes/92-25km_x4.163842 # path to where the mesh is downloaded
 MPAS_DIR=/Users/laratobias-tarsh/Documents/atmos_models/MPAS_model
 STATIC_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/static/mpas_static
 ATMOS_DATA_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/CFSR_TEST
@@ -26,10 +26,16 @@ SST_DATA_DIR=/Users/laratobias-tarsh/Documents/atmos_models/data/SST_ERA5
 PLOT_DIR=/Users/laratobias-tarsh/Documents/MPAS_notes/python_scripts
 
 # naming variables
-MESH_SIZE="240"     # size of mesh in km
-MESH_TYPE="uniform" # just useful for naming (either uniform, variable or LAM)
-MESH_EXT="x1.10242" # "identifier code" for the downloaded mesh (needed for namelists etc)
-RUN_EXT="CFSR_TEST" # name to give the specific run
+MESH_SIZE="240-48"       # size of mesh in km (can include the reduction for variable if desired)
+MESH_TYPE="variable"     # just useful for naming (either uniform, variable or LAM)
+MESH_EXT="x4.163842"      # "identifier code" for the downloaded mesh (needed for namelists etc)
+RUN_EXT="ED_FITZ"      # name to give the specific run
+
+# variables to edit if MESH_TYPE is variable
+MESH_NAME="ed_fitz"     # name to give to the rotated mesh file
+ROT_LAT=47.7           # specify where the central latitude of the refinement should go
+ROT_LON=-87.5             # specify where the central longitude of the refinement should go
+ROT_CCW=90              # rotate orientation of refinement with respect to the poles
 
 # namelist variables
 START_RUN=2010-10-23_00:00:00 # YYYY-MM-DD_hh:mm:ss
@@ -43,11 +49,11 @@ HIST_OUT_INT=6:00:00          # how frequently to output history files (3d)
 DIAG_OUT_INT=3:00:00          # how frequently to output diagnostics files (2d)
 RESTART_INT=1_00:00:00        # how frequently to output restart files
 
-UPDATE_OCEAN='false'          # are we updating the ocean data? 'false' or 'true'
-FG_INTERVAL=none             # interval between SST update files (int like 86400 or none)
+UPDATE_OCEAN='true'          # are we updating the ocean data? 'false' or 'true'
+FG_INTERVAL=86400             # interval between SST update files (int like 86400 or none)
 LAM=false                     # are we doing a limited area simulation
 
-MET_PREFIX='CFSR'             # model being used 
+MET_PREFIX='ERA5'             # model being used 
 N_VERT_LEVS=55                # number of vertical levels in the model
 N_SOIL_LEVS=4                 # number of soil levels being used in the model
 N_FG_LEVS=38                  # number of first guess levels in the atmospheric dataset (forcing specific)
@@ -59,13 +65,45 @@ RUN_DIR=/Users/Documents/atmos_models/MPAS_runs/${MESH_SIZE}km_${MESH_TYPE}_${RU
 ##
 # Ensure all libraries are linked properly (script should do this for you)
 source /Users/laratobias-tarsh/Documents/atmos_models/set_paths_MPAS.sh
+
+# set $MESH_NAME to the same as $MESH_EXT if grid is uniform
+if [[ "$MESH_TYPE" == "uniform" ]]; then
+    echo "Using uniform grid - setting MESH_NAME to ${MESH_EXT}"
+    MESH_NAME=$MESH_EXT
+fi
+
 # Compile the init_atmosphere core
 cd $MPAS_DIR
 make gfortran CORE=init_atmosphere
+
 # Set up the run directory
 mkdir $RUN_DIR
 cd $RUN_DIR
 ln -s ${MESH_DIR}/${MESH_EXT}.grid.nc .    # symlink the grid file for the mesh
+ln -s ${MESH_DIR}/${MESH_EXT}.graph.info.part.${MPI_NPROCS} .  # symlink the mesh partition file
+
+# if using a variable mesh, use grid_rotate to refine the mesh
+if [[ "$MESH_TYPE" == "variable" ]]; then
+    echo "rotating variable resolution grid"
+    
+    # if you are just doing everything manually and using this as a guide:
+    # cp /Users/laratobias-tarsh/Documents/atmos_models/MPAS-Tools/mesh_tools/grid_rotate/namelist.input .
+    
+    # make the namelist for grid_rotate
+    cat << EOF > namelist.input
+&input
+config_original_latitude_degrees = 0
+config_original_longitude_degrees = 0
+
+config_new_latitude_degrees = ${ROT_LAT}
+config_new_longitude_degrees = ${ROT_LON}
+config_birdseye_rotation_counter_clockwise_degrees = ${ROT_CCW}
+/
+EOF
+    grid_rotate ${MESH_EXT}.grid.nc ${MESH_NAME}.grid.nc
+
+fi
+
 ln -s ${MPAS_DIR}/init_atmosphere_model .  # symlink the init_atmosphere executable
 
 # NOTE - these are commented out if you just use the cat command to create a new file
@@ -143,12 +181,12 @@ cat << EOF > streams.init_atmosphere
 <streams>
 <immutable_stream name="input"
                   type="input"
-                  filename_template="${MESH_EXT}.grid.nc"
+                  filename_template="${MESH_NAME}.grid.nc"
                   input_interval="initial_only" />
 
 <immutable_stream name="output"
                   type="output"
-                  filename_template="${MESH_EXT}.static.nc"
+                  filename_template="${MESH_NAME}.static.nc"
                   packages="initial_conds"
                   output_interval="initial_only" />
 
@@ -256,12 +294,12 @@ cat << EOF > streams.init_atmosphere
 <streams>
 <immutable_stream name="input"
                   type="input"
-                  filename_template="${MESH_EXT}.static.nc"
+                  filename_template="${MESH_NAME}.static.nc"
                   input_interval="initial_only" />
 
 <immutable_stream name="output"
                   type="output"
-                  filename_template="${MESH_EXT}.init.nc"
+                  filename_template="${MESH_NAME}.init.nc"
                   packages="initial_conds"
                   output_interval="initial_only" />
 
@@ -298,7 +336,7 @@ EOF
 ## python ${PLOT_DIR}/plot_terrain.py ${MESH_EXT}.init.nc
 
 # PREPROC 3 (OPTIONAL): process SST update files
-if [ $UPDATE_OCEAN == 'true']; then
+if [[ "$UPDATE_OCEAN" == "true" ]]; then
     ln -s ${SST_DATA_DIR}/SST* .  # symlink all needed SST update files to the run directory
     # note, this may need to be edited to take a certain date range
     # e.g. for file in file{1..10}.txt; do ln -s "$file" /path/to/destination/"$file"; done
@@ -306,103 +344,103 @@ if [ $UPDATE_OCEAN == 'true']; then
     # overwrite namelist.init_atmosphere to create SST files
     # main changes in &nhydmodel (NOTE config_init_case=8), &data_sources and &preproc_stages
     cat << EOF > namelist.init_atmosphere
-    &nhyd_model
-        config_init_case = 8
-        config_start_time = '${START_RUN}'
-        config_stop_time = '${END_RUN}'
-        config_theta_adv_order = 3
-        config_coef_3rd_order = 0.25
-        config_interface_projection = 'linear_interpolation'
-    /
-    &dimensions
-        config_nvertlevels = '${N_VERT_LEVS}'
-        config_nsoillevels = '${N_SOIL_LEVS}'
-        config_nfglevels = '${N_FG_LEVS}'
-        config_nfgsoillevels = '${N_FG_SOIL_LEVS}'
-        config_gocartlevels = 1
-    /
-    &data_sources
-        config_geog_data_path = '${SST_DATA_DIR}'
-        config_met_prefix = '${MET_PREFIX}'
-        config_sfc_prefix = 'SST'
-        config_fg_interval = '${FG_INTERVAL}'
-        config_landuse_data = 'MODIFIED_IGBP_MODIS_NOAH'
-        config_soilcat_data = 'STATSGO'
-        config_topo_data = 'GMTED2010'
-        config_vegfrac_data = 'MODIS'
-        config_albedo_data = 'MODIS'
-        config_maxsnowalbedo_data = 'MODIS'
-        config_supersample_factor = 3
-        config_lu_supersample_factor = 1
-        config_30s_supersample_factor = 1
-        config_use_spechumd = false
-    /
-    &vertical_grid
-        config_ztop = '${Z_TOP}'
-        config_nsmterrain = 1
-        config_smooth_surfaces = true
-        config_dzmin = 0.3
-        config_nsm = 30
-        config_tc_vertical_grid = true
-        config_blend_bdy_terrain = false
-    /
-    &interpolation_control
-        config_extrap_airtemp = 'lapse-rate'
-    /
-    &preproc_stages
-        config_static_interp = false
-        config_native_gwd_static = false
-        config_native_gwd_gsl_static = false
-        config_vertical_grid = false
-        config_met_interp = false
-        config_input_sst = true
-        config_frac_seaice = true
-    /
-    &io
-        config_pio_num_iotasks = 0
-        config_pio_stride = 1
-    /
-    &decomposition
-        config_block_decomp_file_prefix = '${MESH_EXT}.graph.info.part.'
-    /
-    EOF
+&nhyd_model
+    config_init_case = 8
+    config_start_time = '${START_RUN}'
+    config_stop_time = '${END_RUN}'
+    config_theta_adv_order = 3
+    config_coef_3rd_order = 0.25
+    config_interface_projection = 'linear_interpolation'
+/
+&dimensions
+    config_nvertlevels = '${N_VERT_LEVS}'
+    config_nsoillevels = '${N_SOIL_LEVS}'
+    config_nfglevels = '${N_FG_LEVS}'
+    config_nfgsoillevels = '${N_FG_SOIL_LEVS}'
+    config_gocartlevels = 1
+/
+&data_sources
+    config_geog_data_path = '${SST_DATA_DIR}'
+    config_met_prefix = '${MET_PREFIX}'
+    config_sfc_prefix = 'SST'
+    config_fg_interval = '${FG_INTERVAL}'
+    config_landuse_data = 'MODIFIED_IGBP_MODIS_NOAH'
+    config_soilcat_data = 'STATSGO'
+    config_topo_data = 'GMTED2010'
+    config_vegfrac_data = 'MODIS'
+    config_albedo_data = 'MODIS'
+    config_maxsnowalbedo_data = 'MODIS'
+    config_supersample_factor = 3
+    config_lu_supersample_factor = 1
+    config_30s_supersample_factor = 1
+    config_use_spechumd = false
+/
+&vertical_grid
+    config_ztop = '${Z_TOP}'
+    config_nsmterrain = 1
+    config_smooth_surfaces = true
+    config_dzmin = 0.3
+    config_nsm = 30
+    config_tc_vertical_grid = true
+    config_blend_bdy_terrain = false
+/
+&interpolation_control
+    config_extrap_airtemp = 'lapse-rate'
+/
+&preproc_stages
+    config_static_interp = false
+    config_native_gwd_static = false
+    config_native_gwd_gsl_static = false
+    config_vertical_grid = false
+    config_met_interp = false
+    config_input_sst = true
+    config_frac_seaice = true
+/
+&io
+    config_pio_num_iotasks = 0
+    config_pio_stride = 1
+/
+&decomposition
+    config_block_decomp_file_prefix = '${MESH_EXT}.graph.info.part.'
+/
+EOF
 
     # overwrite streams.init_atmosphere for desired ICs
     # main changes are to input and output
     cat << EOF > streams.init_atmosphere
-    <streams>
-    <immutable_stream name="input"
-                    type="input"
-                    filename_template="${MESH_EXT}.static.nc"
-                    input_interval="initial_only" />
+<streams>
+<immutable_stream name="input"
+                type="input"
+                filename_template="${MESH_NAME}.static.nc"
+                input_interval="initial_only" />
 
-    <immutable_stream name="output"
-                    type="output"
-                    filename_template="${MESH_EXT}.init.nc"
-                    packages="initial_conds"
-                    output_interval="initial_only" />
+<immutable_stream name="output"
+                type="output"
+                filename_template="${MESH_NAME}.init.nc"
+                packages="initial_conds"
+                output_interval="initial_only" />
 
-    <immutable_stream name="ugwp_oro_data"
-                    type="output"
-                    filename_template="${MESH_EXT}.ugwp_oro_data.nc"
-                    packages="gwd_gsl_stage_out"
-                    output_interval="initial_only" />
+<immutable_stream name="ugwp_oro_data"
+                type="output"
+                filename_template="${MESH_NAME}.ugwp_oro_data.nc"
+                packages="gwd_gsl_stage_out"
+                output_interval="initial_only" />
 
-    <immutable_stream name="surface"
-                    type="output"
-                    filename_template="${MESH_EXT}.sfc_update.nc"
-                    filename_interval="none"
-                    packages="sfc_update"
-                    output_interval="${FG_INTERVAL}" />
+<immutable_stream name="surface"
+                type="output"
+                filename_template="${MESH_NAME}.sfc_update.nc"
+                filename_interval="none"
+                packages="sfc_update"
+                output_interval="${FG_INTERVAL}" />
 
-    <immutable_stream name="lbc"
-                    type="output"
-                    filename_template="lbc.$Y-$M-$D_$h.$m.$s.nc"
-                    filename_interval="output_interval"
-                    packages="lbcs"
-                    output_interval="3:00:00" />
+<immutable_stream name="lbc"
+                type="output"
+                filename_template="lbc.$Y-$M-$D_$h.$m.$s.nc"
+                filename_interval="output_interval"
+                packages="lbcs"
+                output_interval="3:00:00" />
 
-    </streams>
+</streams>
 EOF
     ./init_atmosphere
     # mpirun -np 4 init_atmosphere
@@ -421,7 +459,7 @@ cd $MPAS_DIR
 make clean CORE=init_atmosphere
 make gfortran CORE=atmosphere
 
-cd cd $RUN_DIR
+cd $RUN_DIR
 ln -s ${MPAS_DIR}/atmosphere_model .      # symlink the atmosphere executable
 cp ${MPAS_DIR}/stream_list.atmosphere.* . # copy the stream lists for the atmosphere core (DIFFERENT to streams)
 ln -s ${MPAS_DIR}/src/core_atmosphere/physics/physics_wrf/files/* . # symlink to files needed for model physics
@@ -519,7 +557,7 @@ cat << EOF > streams.atmosphere
 <streams>
 <immutable_stream name="input"
                   type="input"
-                  filename_template="${MESH_EXT}.init.nc"
+                  filename_template="${MESH_NAME}.init.nc"
                   input_interval="initial_only" />
 
 <immutable_stream name="restart"
@@ -546,7 +584,7 @@ cat << EOF > streams.atmosphere
 
 <stream name="surface"
         type="input"
-        filename_template="${MESH_EXT}.sfc_update.nc"
+        filename_template="${MESH_NAME}.sfc_update.nc"
         filename_interval="none"
         input_interval="${FG_INTERVAL}" >
 
@@ -555,7 +593,7 @@ cat << EOF > streams.atmosphere
 
 <immutable_stream name="iau"
                   type="input"
-                  filename_template="x1.40962.AmB.$Y-$M-$D_$h.$m.$s.nc"
+                  filename_template="${MESH_EXT}.AmB.$Y-$M-$D_$h.$m.$s.nc"
                   filename_interval="none"
                   packages="iau"
                   input_interval="initial_only" />
@@ -569,7 +607,7 @@ cat << EOF > streams.atmosphere
 
 <immutable_stream name="ugwp_oro_data_in"
                   type="input"
-                  filename_template="x1.40962.ugwp_oro_data.nc"
+                  filename_template="${MESH_EXT}.ugwp_oro_data.nc"
                   packages="ugwp_orog_stream"
                   input_interval="initial_only" />
 

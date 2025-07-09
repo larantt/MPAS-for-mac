@@ -146,3 +146,23 @@ cd WPS
 ./compile >& log.compile
 
 # when it inveitably kills itself: grep -i error log.compile
+
+################
+# BONUS - METIS
+################
+git clone git@github.com:KarypisLab/GKlib.git
+git clone https://github.com/KarypisLab/METIS.git
+
+cd GKlib
+make config CONFIG_FLAGS='-D BUILD_SHARED_LIBS=ON'
+make
+make install
+
+cd ../METIS
+sed -i .bak '/add_library(metis ${METIS_LIBRARY_TYPE} ${metis_sources})/ s/$/\ntarget_link_libraries(metis GKlib)/' libmetis/CMakeLists.txt
+sed -i .bak '/^CONFIG_FLAGS \?= / s,$, -DCMAKE_BUILD_RPATH=${HOME}/.local/lib -DCMAKE_INSTALL_RPATH_USE_LINK_PATH=ON,' Makefile
+make config shared=1 cc=gcc prefix=/usr/local gklib_path=/usr/local
+make
+make install
+export DYLD_LIBRARY_PATH="$HOME/local/lib:$DYLD_LIBRARY_PATH"
+# gpmetis -minconn -contig -niter=200 x4.163842.graph.info 4

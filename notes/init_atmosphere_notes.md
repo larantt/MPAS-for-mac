@@ -48,4 +48,4 @@ The first experiment I am running is the provided [CFSR Test](https://www2.mmm.u
 * Everything ran pretty smoothly, with 4 processors on the i5 macbook pro, 5 days took about 22 minutes!
 
 #### EXPERIMENT 2 ####
-The second experiment I am running is the synoptics of the Edmund Fitzgerald (credit John and Kaleb) using ERA5 data and the `era5_to_int` package. The wreck was on November 10th 1975, so the simulation will start on November 8th 1975 and end on November 12th 1975. Here I am just detailing the process of the intermediate file creation.
+The second experiment I am running is the synoptics of the Edmund Fitzgerald (credit John and Kaleb) using ERA5 data on a 92-25km mesh. For this I also needed METIS to partition the grid for 4 MPI tasks.

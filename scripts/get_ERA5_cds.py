@@ -12,6 +12,8 @@ python get_ERA5_cds.py
 ```
 After this step, the data needs to be passed to ungrib.exe before being used to force the model
 
+NOTE: for use in ungrib, you need to ensure all files begin with the model prefix (e.g. ERA5)
+
 TO DO:
 - [ ] allow terminal input so that downloading data and calling ungrib can be automated with a single bash script
 """
@@ -37,7 +39,7 @@ OUTPATH = "/Users/laratobias-tarsh/Documents/atmos_models/data/ERA5"  # where to
 START_DATE='1975-11-08'  # initialization date for simulation (YYYY-MM-DD)
 START_HOUR='00'          # hour to initialize simulation (HH), should probably default to 0z (00)
 
-UPDATE_SST=False         # should SST update data be downloaded? if False, ignore END_DATE and UPDATE_INTERVAL
+UPDATE_SST=True         # should SST update data be downloaded? if False, ignore END_DATE and UPDATE_INTERVAL
 END_DATE='1975-11-11'    # end date for simulation (YYYY-MM-DD), NOTE: only used for SST updates
 UPDATE_INTERVAL='6'      # how frequently are SSTs updated each day
 
@@ -114,7 +116,7 @@ def get_surface_data(outpath, start=START_DATE, n=NORTH, w=WEST,
             'area':f'{n}/{w}/{s}/{e}',
             'time':hh,
         },
-        f'{outpath}/SFC_ERA5-{start}-{hh}00.grib')
+        f'{outpath}/ERA5-{start}-{hh}00_SFC.grib')
     
 def get_vertical_data(outpath, start=START_DATE, n=NORTH, w=WEST,
                         s=SOUTH, e=EAST, hh=START_HOUR):
@@ -166,7 +168,7 @@ def get_vertical_data(outpath, start=START_DATE, n=NORTH, w=WEST,
             'area':f'{n}/{w}/{s}/{e}',
             'time':hh,
         },
-        f'{outpath}/PL_ERA5-{start}-{hh}00.grib')    
+        f'{outpath}/ERA5-{start}-{hh}00_PL.grib')    
 
 def get_sst_data(outpath, start=START_DATE, end=END_DATE, n=NORTH, w=WEST,
                         s=SOUTH, e=EAST, hh=START_HOUR, interv=UPDATE_INTERVAL):
