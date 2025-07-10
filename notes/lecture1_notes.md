@@ -182,6 +182,21 @@ tail -f log.atmosphere.0000.out
 ```
 to monitor model progress, gives information about how the schemes are being run in each timestep, get the summary of the min and max vertical velocities in each timestep in m/s, which can be used to sanity check the stability of the model, then get wall clock time for each integration step (can use for each simulation)
 
+The estimated wall time for a simulation is:
+
+$$
+\text{Wall Time (s)} = \frac{T_s \times \left( \frac{T_{\text{sim}}}{dt} \right)}{N_{\text{MPI}} \times \eta}
+$$
+
+Where:
+
+- \( T_s \): Time per timestep (in seconds, observed)
+- \( T_{\text{sim}} \): Total simulation time (in seconds)
+- \( dt \): Model timestep (in seconds)
+- \( N_{\text{MPI}} \): Number of MPI processes
+- \( \eta \): Parallel efficiency (range: 0 < η ≤ 1)
+
+
 #### calculating simulation time ####
 * total length of simulation using each step/time for each step
 
